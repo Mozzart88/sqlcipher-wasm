@@ -11,7 +11,13 @@ SQLCipher is based on SQLite and stable upstream release features are periodical
 
 SQLCipher is maintained by Zetetic, LLC, and additional information and documentation is available on the official [SQLCipher site](https://www.zetetic.net/sqlcipher/).
 
+## SQLCipher-wasm
+
+SQLCipher-wasm is a standalone fork that implements opportunity to build wasm binary for in-browser use based on original wasm-build steps from SQLite.
+
 ## Features
+
+- Wasm binary can be run on browser in separate worker or in a main thread
 
 - Fast performance with as little as 5-15% overhead for encryption on many operations
 - 100% of data in the database file is encrypted
@@ -21,7 +27,7 @@ SQLCipher is maintained by Zetetic, LLC, and additional information and document
 
 ## Compatibility
 
-SQLCipher maintains database format compatibility within the same major version number so an application on any platform can open databases created by any other application provided the major version of SQLCipher is the same between them. However, major version updates (e.g. from 3.x to 4.x) often include changes to default settings. This means that newer major versions of SQLCipher will not open databases created by older versions without using special settings. For example, SQLCipher 4 introduces many new performance and security enhancements. The new default algorithms, increased KDF iterations, and larger page size mean that SQLCipher 4 will not open databases created by SQLCipher 1.x, 2.x, or 3.x by default. Instead, an application would either need to migrate the older databases to use the new format or enable a special backwards-compatibility mode. The available options are described in SQLCipher's [upgrade documentation](https://discuss.zetetic.net/t/upgrading-to-sqlcipher-4/3283). 
+SQLCipher maintains database format compatibility within the same major version number so an application on any platform can open databases created by any other application provided the major version of SQLCipher is the same between them. However, major version updates (e.g. from 3.x to 4.x) often include changes to default settings. This means that newer major versions of SQLCipher will not open databases created by older versions without using special settings. For example, SQLCipher 4 introduces many new performance and security enhancements. The new default algorithms, increased KDF iterations, and larger page size mean that SQLCipher 4 will not open databases created by SQLCipher 1.x, 2.x, or 3.x by default. Instead, an application would either need to migrate the older databases to use the new format or enable a special backwards-compatibility mode. The available options are described in SQLCipher's [upgrade documentation](https://discuss.zetetic.net/t/upgrading-to-sqlcipher-4/3283).
 
 SQLCipher is also compatible with standard SQLite databases. When a key is not provided, SQLCipher will behave just like the standard SQLite library. It is also possible to convert from a plaintext database (standard SQLite) to an encrypted SQLCipher database using [ATTACH and the sqlcipher_export() convenience function](https://discuss.zetetic.net/t/how-to-encrypt-a-plaintext-sqlite-database-to-use-sqlcipher-and-avoid-file-is-encrypted-or-is-not-a-database-errors/868).
 
@@ -29,59 +35,60 @@ SQLCipher is also compatible with standard SQLite databases. When a key is not p
 
 The SQLCipher team welcomes contributions to the core library. All contributions including pull requests and patches should be based on the `prerelease` branch, and must be accompanied by a [contributor agreement](https://www.zetetic.net/contributions/). We strongly encourage [discussion](https://discuss.zetetic.net/c/sqlcipher) of the proposed change prior to development and submission.
 
-## Compiling
+## Compiling SQLCipher-wasm
 
-Building SQLCipher is similar to compiling a regular version of SQLite from source, with a few small exceptions. You must:
+Building SQLCipher-wasm is similar to compiling a regualar version of SQLCipher from source, with a few small exceptions:
 
- 1. define `SQLITE_HAS_CODEC`
- 2. define `SQLITE_TEMP_STORE=2` or `SQLITE_TEMP_STORE=3` (or use `configure`'s --with-tempstore=yes option)
- 3. define `SQLITE_EXTRA_INIT=sqlcipher_extra_init` and `SQLITE_EXTRA_SHUTDOWN=sqlcipher_extra_shutdown`
- 4. define `SQLITE_THREADSAFE` to `1` or `2` (enabled automatically by `configure`)
- 2. compile and link with a supported cryptographic provider (OpenSSL, LibTomCrypt, CommonCrypto/Security.framework, or NSS)
- 
-The following examples demonstrate use of OpenSSL, which is a readily available provider on most Unix-like systems. Note that, in this example, `--with-tempstore=yes` is setting `SQLITE_TEMP_STORE=2` for the build, and `SQLITE_THREADSAFE` has a default value of `1`.
+1. There is no need to compile sqlcihper binary, if you dont need it
+2. For encryption backend you need [LibTomCrypt](https://github.com/libtom/libtomcrypt) sources, placed in ext/wasm/ltc folder.
+3. For compiling you need activated [emSDK](https://github.com/emscripten-core/emsdk)
+
+The following examples demonstrate full steps to compile SQLCipher-wasm.
+Assumes that you already clone this repository and switch to wasm branch.
 
 ```
-$ ./configure --with-tempstore=yes CFLAGS="-DSQLITE_HAS_CODEC -DSQLITE_EXTRA_INIT=sqlcipher_extra_init -DSQLITE_EXTRA_SHUTDOWN=sqlcipher_extra_shutdown" \
-	LDFLAGS="-lcrypto"
+$ source /path/to/emsdk/emsdk_env.sh
+$ ./configure \
+  --with-tempstore=yes  \
+  CFLAGS="-DSQLITE_HAS_CODEC -DSQLITE_EXTRA_INIT=sqlcipher_extra_init -DSQLITE_EXTRA_SHUTDOWN=sqlcipher_extra_shutdown -DSQLCIPHER_CRYPTO_LIBTOMCRYPT"
+$ make sqlite3.c
+$ cd ext/wasm
+$ cp -r /path/to/libtomcrypt/src ltc
 $ make
 ```
+
+This steps will produce *.js/wasm files in jswasm folder, that can be used in your app.
 
 ## Testing
 
 The full SQLite test suite will not complete successfully when using SQLCipher. In some cases encryption interferes with low-level tests that require access to database file data or features which are unsupported by SQLCipher. Those tests that are intended to support encryption are intended for non-SQLCipher implementations. In addition, because SQLite tests are not always isolated, if one test fails it can trigger a domino effect with other failures in later steps.
 
-As a result, the SQLCipher package includes it's own independent tests that exercise and verify the core functionality of the SQLCipher extensions. This test suite is intended to provide an abbreviated verification of SQLCipher's internal logic; it does not perform an exhaustive test of the SQLite database system as a whole or verify functionality on specific platforms. Because SQLCipher is based on stable upstream builds of SQLite, it is considered a basic assumption that the core SQLite library code is operating properly (the SQLite core is almost untouched in SQLCipher). Thus, the additional SQLCipher-specific test provide the requisite verification that the library is operating as expected with SQLCipher's security features enabled.
+As a result, the SQLCipher package doesn't included specific tests right now.
 
-To run SQLCipher specific tests, configure as described here and run the following to execute the tests and receive a report of the results:
+## Usage
 
-```
-$ ./configure --with-tempstore=yes --enable-fts5 CFLAGS="-DSQLITE_HAS_CODEC -DSQLITE_EXTRA_INIT=sqlcipher_extra_init -DSQLITE_EXTRA_SHUTDOWN=sqlcipher_extra_shutdown -DSQLCIPHER_TEST" \
-	LDFLAGS="-lcrypto"
-$ make testfixture
-$ ./testfixture test/sqlcipher.test
-```
+Content of jswasm folder is fully compatible with [@sqlite.org/sqlite-wasm](https://github.com/sqlite/sqlite-wasm) npm package and all you need to do is copy sources of this package to your project and replace original jswasm folder with your build.
 
 ## Encrypting a database
 
-To specify an encryption passphrase for the database via the SQL interface you 
+To specify an encryption passphrase for the database via the SQL interface you
 use a PRAGMA. The passphrase you enter is passed through PBKDF2 key derivation to
-obtain the encryption key for the database 
+obtain the encryption key for the database
 
-	PRAGMA key = 'passphrase';
+ PRAGMA key = 'passphrase';
 
 Alternately, you can specify an exact byte sequence using a blob literal. If you
 use this method it is your responsibility to ensure that the data you provide is a
-64 character hex string, which will be converted directly to 32 bytes (256 bits) of 
+64 character hex string, which will be converted directly to 32 bytes (256 bits) of
 key data without key derivation.
 
-	PRAGMA key = "x'2DD29CA851E7B56E4697B0E1F08507293D761A05CE4D1B628663F411A8086D99'";
+ PRAGMA key = "x'2DD29CA851E7B56E4697B0E1F08507293D761A05CE4D1B628663F411A8086D99'";
 
-To encrypt a database programmatically you can use the `sqlite3_key` function. 
-The data provided in `pKey` is converted to an encryption key according to the 
-same rules as `PRAGMA key`. 
+To encrypt a database programmatically you can use the `sqlite3_key` function.
+The data provided in `pKey` is converted to an encryption key according to the
+same rules as `PRAGMA key`.
 
-	int sqlite3_key(sqlite3 *db, const void *pKey, int nKey);
+ int sqlite3_key(sqlite3 *db, const void*pKey, int nKey);
 
 `PRAGMA key` or `sqlite3_key` should be called as the first operation when a database is open.
 
@@ -90,37 +97,41 @@ same rules as `PRAGMA key`.
 To change the encryption passphrase for an existing database you may use the rekey PRAGMA
 after you've supplied the correct database password;
 
-	PRAGMA key = 'passphrase'; -- start with the existing database passphrase
-	PRAGMA rekey = 'new-passphrase'; -- rekey will reencrypt with the new passphrase
+ PRAGMA key = 'passphrase'; -- start with the existing database passphrase
+ PRAGMA rekey = 'new-passphrase'; -- rekey will reencrypt with the new passphrase
 
 The hex rekey pragma may be used to rekey to a specific binary value
 
-	PRAGMA rekey = "x'2DD29CA851E7B56E4697B0E1F08507293D761A05CE4D1B628663F411A8086D99'";
+ PRAGMA rekey = "x'2DD29CA851E7B56E4697B0E1F08507293D761A05CE4D1B628663F411A8086D99'";
 
 This can be accomplished programmatically by using sqlite3_rekey;
   
-	sqlite3_rekey(sqlite3 *db, const void *pKey, int nKey)
+ sqlite3_rekey(sqlite3 *db, const void*pKey, int nKey)
 
 ## Support
 
+This package is in alpha state. If you have questions or want to report some issue related to SQLCipher-wasm build please enter it into the GitHub Issue tracker:
+
+<https://github.com/mozzart88/sqlcipher-wasm/issues>
+
 The primary source for complete documentation (design, API, platforms, usage) is the SQLCipher website:
 
-https://www.zetetic.net/sqlcipher/documentation
+<https://www.zetetic.net/sqlcipher/documentation>
 
 The primary avenue for support and discussions is the SQLCipher discuss site:
 
-https://discuss.zetetic.net/c/sqlcipher
+<https://discuss.zetetic.net/c/sqlcipher>
 
-Issues or support questions on using SQLCipher should be entered into the 
+Issues or support questions on using SQLCipher should be entered into the
 GitHub Issue tracker:
 
-https://github.com/sqlcipher/sqlcipher/issues
+<https://github.com/sqlcipher/sqlcipher/issues>
 
-Please DO NOT post issues, support questions, or other problems to blog 
+Please DO NOT post issues, support questions, or other problems to blog
 posts about SQLCipher as we do not monitor them frequently.
 
-If you are using SQLCipher in your own software please let us know at 
-support@zetetic.net!
+If you are using SQLCipher in your own software please let us know at
+<support@zetetic.net>!
 
 ## Community Edition Open Source License
 
@@ -129,7 +140,7 @@ All rights reserved.
 
 Redistribution and use in source and binary forms, with or without
 modification, are permitted provided that the following conditions are met:
-    * Redistributions of source code must retain the above copyright
+    *Redistributions of source code must retain the above copyright
       notice, this list of conditions and the following disclaimer.
     * Redistributions in binary form must reproduce the above copyright
       notice, this list of conditions and the following disclaimer in the
@@ -186,7 +197,7 @@ verify its integrity, there are hints on how to do that in the
 ## Contacting The SQLite Developers
 
 The preferred way to ask questions or make comments about SQLite or to
-report bugs against SQLite is to visit the 
+report bugs against SQLite is to visit the
 [SQLite Forum](https://sqlite.org/forum) at <https://sqlite.org/forum/>.
 Anonymous postings are permitted.
 
@@ -197,7 +208,7 @@ email to drh at sqlite dot org.
 ## Public Domain
 
 The SQLite source code is in the public domain.  See
-<https://sqlite.org/copyright.html> for details. 
+<https://sqlite.org/copyright.html> for details.
 
 Because SQLite is in the public domain, we do not normally accept pull
 requests, because if we did take a pull request, the changes in that
@@ -209,17 +220,17 @@ then no longer be fully in the public domain.
 If you do not want to use Fossil, you can download tarballs or ZIP
 archives or [SQLite archives](https://sqlite.org/cli.html#sqlar) as follows:
 
-  *  Latest trunk check-in as
+- Latest trunk check-in as
      [Tarball](https://sqlite.org/src/tarball/sqlite.tar.gz),
      [ZIP-archive](https://sqlite.org/src/zip/sqlite.zip), or
      [SQLite-archive](https://sqlite.org/src/sqlar/sqlite.sqlar).
 
-  *  Latest release as
+- Latest release as
      [Tarball](https://sqlite.org/src/tarball/sqlite.tar.gz?r=release),
      [ZIP-archive](https://sqlite.org/src/zip/sqlite.zip?r=release), or
      [SQLite-archive](https://sqlite.org/src/sqlar/sqlite.sqlar?r=release).
 
-  *  For other check-ins, substitute an appropriate branch name or
+- For other check-ins, substitute an appropriate branch name or
      tag or hash prefix in place of "release" in the URLs of the previous
      bullet.  Or browse the [timeline](https://sqlite.org/src/timeline)
      to locate the check-in desired, click on its information page link,
@@ -333,7 +344,7 @@ Build using Makefile.msc.  Example:
         nmake /f Makefile.msc devtest
         nmake /f Makefile.msc releasetest
         nmake /f Makefile.msc sqlite3_analyzer.exe
- 
+
 There are many other makefile targets.  See comments in Makefile.msc for
 details.
 
@@ -344,22 +355,22 @@ command-line to enable new compile-time options.  For example:
 
 ## Source Tree Map
 
-  *  **src/** - This directory contains the primary source code for the
+- **src/** - This directory contains the primary source code for the
      SQLite core.  For historical reasons, C-code used for testing is
      also found here.  Source files intended for testing begin with "`test`".
      The `tclsqlite3.c` and `tclsqlite3.h` files are the TCL interface
      for SQLite and are also not part of the core.
 
-  *  **test/** - This directory and its subdirectories contains code used
+- **test/** - This directory and its subdirectories contains code used
      for testing.  Files that end in "`.test`" are TCL scripts that run
      tests using an augmented TCL interpreter named "testfixture".  Use
-     a command like "`make testfixture`" (unix) or 
+     a command like "`make testfixture`" (unix) or
      "`nmake /f Makefile.msc testfixture.exe`" (windows) to build that
      augmented TCL interpreter, then run individual tests using commands like
      "`testfixture test/main.test`".  This test/ subdirectory also contains
      additional C code modules and scripts for other kinds of testing.
 
-  *  **tool/** - This directory contains programs and scripts used to
+- **tool/** - This directory contains programs and scripts used to
      build some of the machine-generated code that goes into the SQLite
      core, as well as to build and run tests and perform diagnostics.
      The source code to [the Lemon parser generator](./doc/lemon.html) is
@@ -368,15 +379,15 @@ command-line to enable new compile-time options.  For example:
      the src/sqlite.h.in file and uses it as a template to construct
      the deliverable "sqlite3.h" file that defines the SQLite interface.
 
-  *  **ext/** - Various extensions to SQLite are found under this
+- **ext/** - Various extensions to SQLite are found under this
      directory.  For example, the FTS5 subsystem is in "ext/fts5/".
      Some of these extensions (ex: FTS3/4, FTS5, RTREE) might get built
      into the SQLite amalgamation, but not all of them.  The
      "ext/misc/" subdirectory contains an assortment of one-file extensions,
      many of which are omitted from the SQLite core, but which are included
      in the [SQLite CLI](https://sqlite.org/cli.html).
-     
-  *  **doc/** - Some documentation files about SQLite internals are found
+
+- **doc/** - Some documentation files about SQLite internals are found
      here.  Note, however, that the primary documentation designed for
      application developers and users of SQLite is in a completely separate
      repository.  Note also that the primary API documentation is derived
@@ -477,66 +488,66 @@ implementation.  It will not be the easiest library in the world to hack.
 
 ### Key source code files
 
-  *  **sqlite.h.in** - This file defines the public interface to the SQLite
+- **sqlite.h.in** - This file defines the public interface to the SQLite
      library.  Readers will need to be familiar with this interface before
      trying to understand how the library works internally.  This file is
      really a template that is transformed into the "sqlite3.h" deliverable
      using a script invoked by the makefile.
 
-  *  **sqliteInt.h** - this header file defines many of the data objects
+- **sqliteInt.h** - this header file defines many of the data objects
      used internally by SQLite.  In addition to "sqliteInt.h", some
      subsystems inside of sQLite have their own header files.  These internal
      interfaces are not for use by applications.  They can and do change
      from one release of SQLite to the next.
 
-  *  **parse.y** - This file describes the LALR(1) grammar that SQLite uses
+- **parse.y** - This file describes the LALR(1) grammar that SQLite uses
      to parse SQL statements, and the actions that are taken at each step
      in the parsing process.  The file is processed by the
      [Lemon Parser Generator](./doc/lemon.html) to produce the actual C code
      used for parsing.
 
-  *  **vdbe.c** - This file implements the virtual machine that runs
+- **vdbe.c** - This file implements the virtual machine that runs
      prepared statements.  There are various helper files whose names
      begin with "vdbe".  The VDBE has access to the vdbeInt.h header file
      which defines internal data objects.  The rest of SQLite interacts
      with the VDBE through an interface defined by vdbe.h.
 
-  *  **where.c** - This file (together with its helper files named
+- **where.c** - This file (together with its helper files named
      by "where*.c") analyzes the WHERE clause and generates
      virtual machine code to run queries efficiently.  This file is
      sometimes called the "query optimizer".  It has its own private
      header file, whereInt.h, that defines data objects used internally.
 
-  *  **btree.c** - This file contains the implementation of the B-Tree
+- **btree.c** - This file contains the implementation of the B-Tree
      storage engine used by SQLite.  The interface to the rest of the system
      is defined by "btree.h".  The "btreeInt.h" header defines objects
      used internally by btree.c and not published to the rest of the system.
 
-  *  **pager.c** - This file contains the "pager" implementation, the
+- **pager.c** - This file contains the "pager" implementation, the
      module that implements transactions.  The "pager.h" header file
      defines the interface between pager.c and the rest of the system.
 
-  *  **os_unix.c** and **os_win.c** - These two files implement the interface
+- **os_unix.c** and **os_win.c** - These two files implement the interface
      between SQLite and the underlying operating system using the run-time
      pluggable VFS interface.
 
-  *  **shell.c.in** - This file is not part of the core SQLite library.  This
+- **shell.c.in** - This file is not part of the core SQLite library.  This
      is the file that, when linked against sqlite3.a, generates the
      "sqlite3.exe" command-line shell.  The "shell.c.in" file is transformed
      into "shell.c" as part of the build process.
 
-  *  **tclsqlite.c** - This file implements the Tcl bindings for SQLite.  It
+- **tclsqlite.c** - This file implements the Tcl bindings for SQLite.  It
      is not part of the core SQLite library.  But as most of the tests in this
      repository are written in Tcl, the Tcl language bindings are important.
 
-  *  **test\*.c** - Files in the src/ folder that begin with "test" go into
+- **test\*.c** - Files in the src/ folder that begin with "test" go into
      building the "testfixture.exe" program.  The testfixture.exe program is
      an enhanced Tcl shell.  The testfixture.exe program runs scripts in the
      test/ folder to validate the core SQLite code.  The testfixture program
      (and some other test programs too) is built and run when you type
      "make test".
 
-  *  **VERSION**, **manifest**, and **manifest.uuid** - These files define
+- **VERSION**, **manifest**, and **manifest.uuid** - These files define
      the current SQLite version number.  The "VERSION" file is human generated,
      but the "manifest" and "manifest.uuid" files are automatically generated
      by the [Fossil version control system](https://fossil-scm.org/).
@@ -545,6 +556,7 @@ There are many other source files.  Each has a succinct header comment that
 describes its purpose and role within the larger system.
 
 <a name="vauth"></a>
+
 ## Verifying Code Authenticity
 
 The `manifest` file at the root directory of the source tree
@@ -560,14 +572,14 @@ you can be confident that your source tree is authentic and unadulterated.
 Details on the format for the `manifest` files are available
 [on the Fossil website](https://fossil-scm.org/home/doc/trunk/www/fileformat.wiki#manifest).
 
-The process of checking source code authenticity is automated by the 
+The process of checking source code authenticity is automated by the
 makefile:
 
->   make verify-source
+> make verify-source
 
 Or on windows:
 
->   nmake /f Makefile.msc verify-source
+> nmake /f Makefile.msc verify-source
 
 Using the makefile to verify source integrity is good for detecting
 accidental changes to the source tree, but malicious changes could be
