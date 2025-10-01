@@ -387,29 +387,31 @@ static void sqlcipher_fini(void) {
   sqlcipher_extra_shutdown();
 }
 
-#if defined(_WIN32)
-  #ifndef SQLCIPHER_OMIT_DLLMAIN
-  BOOL WINAPI DllMain(HINSTANCE hinstDLL, DWORD fdwReason, LPVOID lpvReserved) {
-    switch (fdwReason) {
-      case DLL_PROCESS_DETACH:
-        sqlcipher_log(SQLCIPHER_LOG_DEBUG, SQLCIPHER_LOG_CORE, "%s: calling sqlcipher_extra_shutdown()", __func__);
-        sqlcipher_extra_shutdown();
-        break;
-      default:
-        break;
+#if !defined(__EMSCRIPTEN__)
+  #if defined(_WIN32)
+    #ifndef SQLCIPHER_OMIT_DLLMAIN
+    BOOL WINAPI DllMain(HINSTANCE hinstDLL, DWORD fdwReason, LPVOID lpvReserved) {
+      switch (fdwReason) {
+        case DLL_PROCESS_DETACH:
+          sqlcipher_log(SQLCIPHER_LOG_DEBUG, SQLCIPHER_LOG_CORE, "%s: calling sqlcipher_extra_shutdown()", __func__);
+          sqlcipher_extra_shutdown();
+          break;
+        default:
+          break;
+      }
+      return TRUE;
     }
-    return TRUE;
-  }
-  #endif
-#elif defined(__APPLE__)
-  #if !defined(__has_feature) || !__has_feature(address_sanitizer)
-  static void (*const sqlcipher_fini_func)(void) __attribute__((used, section("__DATA,__mod_term_func"))) = sqlcipher_fini;
+    #endif
+  #elif defined(__APPLE__)
+    #if !defined(__has_feature) || !__has_feature(address_sanitizer)
+    static void (*const sqlcipher_fini_func)(void) __attribute__((used, section("__DATA,__mod_term_func"))) = sqlcipher_fini;
+    #else
+    static void sqlcipher_cleanup_destructor(void) __attribute__((destructor));
+    static void sqlcipher_cleanup_destructor(void) { sqlcipher_fini(); }
+    #endif
   #else
-  static void sqlcipher_cleanup_destructor(void) __attribute__((destructor));
-  static void sqlcipher_cleanup_destructor(void) { sqlcipher_fini(); }
+  static void (*const sqlcipher_fini_func)(void) __attribute__((used, section(".fini_array"))) = sqlcipher_fini;
   #endif
-#else
-static void (*const sqlcipher_fini_func)(void) __attribute__((used, section(".fini_array"))) = sqlcipher_fini;
 #endif
 
 static void sqlcipher_exportFunc(sqlite3_context*, int, sqlite3_value**);
@@ -721,6 +723,19 @@ int sqlcipher_memcmp(const void *v0, const void *v1, int len) {
   
   return (result != 0);
 }
+
+#ifdef __EMSCRIPTEN__
+  int mlock(const void *addr, size_t len) {
+  (void) addr;
+  (void) len;
+  return 0;
+}
+int munlock(const void *addr, size_t len) {
+  (void) addr;
+  (void) len;
+  return 0;
+}
+#endif
 
 static void sqlcipher_mlock(void *ptr, sqlite_uint64 sz) {
 #ifndef OMIT_MEMLOCK

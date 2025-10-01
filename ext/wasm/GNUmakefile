@@ -145,7 +145,8 @@ JS_BUILD_MODES := vanilla esm bunder-friendly node
 ########################################################################
 # dir.top = the top dir of the canonical build tree, where
 # sqlite3.[ch] live.
-dir.top := ../..
+dir.top := $(abspath ../..)
+# @Mozzart88: ^^^^^^ sometime top dir for included makefile is unrelated
 # Maintenance reminder: some Emscripten flags require absolute paths
 # but we want relative paths for most stuff simply to reduce
 # noise. The $(abspath...) GNU make function can transform relative
@@ -163,6 +164,8 @@ dir.dout := $(dir.wasm)/jswasm
 # end-user deliverables.
 dir.tmp := $(dir.wasm)/bld
 dir.wasmfs := $(dir.dout)
+# @Mozzart88: I use LibTomCrypt ans encryption backend, and I placed it sources in this folder
+dir.ltc := ltc
 
 MKDIR.bld := $(dir.tmp)
 $(MKDIR.bld):
@@ -229,7 +232,7 @@ endif
 # Common options for building sqlite3-wasm.c and speedtest1.c.
 # Explicit ENABLEs...
 SQLITE_OPT.common := \
-  -DSQLITE_THREADSAFE=0 \
+  -DSQLITE_THREADSAFE=1 \
   -DSQLITE_TEMP_STORE=2 \
   -DSQLITE_ENABLE_MATH_FUNCTIONS \
   -DSQLITE_OS_KV_OPTIONAL=1 \
@@ -254,19 +257,34 @@ SQLITE_OPT.full-featured := \
   -DSQLITE_ENABLE_DBPAGE_VTAB \
   -DSQLITE_ENABLE_DBSTAT_VTAB \
   -DSQLITE_ENABLE_FTS5 \
-  -DSQLITE_ENABLE_MATH_FUNCTIONS \
   -DSQLITE_ENABLE_OFFSET_SQL_FUNC \
   -DSQLITE_ENABLE_PREUPDATE_HOOK \
   -DSQLITE_ENABLE_RTREE \
   -DSQLITE_ENABLE_SESSION \
   -DSQLITE_ENABLE_STMTVTAB \
-  -DSQLITE_ENABLE_UNKNOWN_SQL_FUNCTION
+  -DSQLITE_ENABLE_UNKNOWN_SQL_FUNCTION \
+  -DSQLITE_ENABLE_COLUMN_METADATA
 
+# Mozzart88: SQLCipher specific options
+SQLITE_OPT.sqlcipher := \
+	-DSQLITE_HAS_CODEC \
+	-DSQLITE_EXTRA_INIT=sqlcipher_extra_init \
+	-DSQLITE_EXTRA_SHUTDOWN=sqlcipher_extra_shutdown \
+	-DSQLCIPHER_CRYPTO_LIBTOMCRYPT \
+	-USQLITE_ENABLE_EXPLAIN_COMMENTS \
+	-DSQLITE_OMIT_WAL 
+
+	# Mozzart88: In some sources I found that -DSQLITE_THREADSAFE should be 0.
+	# My experience shows that it doesn't matter
+	# -DSQLITE_THREADSAFE=0 \
+	# -DSQLITE_TEMP_STORE=3 \
+	#
 ifeq (0,$(wasm-bare-bones))
   # The so-called canonical build is full-featured:
   SQLITE_OPT := \
     $(SQLITE_OPT.common) \
-    $(SQLITE_OPT.full-featured)
+    $(SQLITE_OPT.full-featured) \
+    $(SQLITE_OPT.sqlcipher)
 else
   # The so-called bare-bones build is exactly that:
   SQLITE_OPT := \
@@ -411,7 +429,7 @@ DISTCLEAN_FILES += $(bin.stripccomments)
 # appended to $(SQLITE.CALL.C-PP.FILTER.global).
 bin.c-pp := ./c-pp
 $(bin.c-pp): c-pp.c $(sqlite3.c) # $(MAKEFILE)
-	$(CC) -O0 -o $@ c-pp.c $(sqlite3.c) '-DCMPP_DEFAULT_DELIM="//#"' -I$(dir.top) \
+	$(CC) -O0 -o $@ c-pp.c $(sqlite3.c) '-DCMPP_DEFAULT_DELIM="//#"' -I$(dir.top) -I$(dir.ltc)/src/headers \
 		-DSQLITE_OMIT_LOAD_EXTENSION -DSQLITE_OMIT_DEPRECATED -DSQLITE_OMIT_UTF16 \
 		-DSQLITE_OMIT_SHARED_CACHE -DSQLITE_OMIT_WAL -DSQLITE_THREADSAFE=0 \
 		-DSQLITE_TEMP_STORE=3
@@ -435,6 +453,7 @@ endef
 
 # cflags.common = C compiler flags for all builds
 cflags.common :=  -I. -I$(dir $(sqlite3.c))
+cflags.common += -I$(dir.ltc)/src/headers
 # emcc.WASM_BIGINT = 1 for BigInt (C int64) support, else 0.  The API
 # disables certain features if BigInt is not enabled and such builds
 # _are not tested_ on any regular basis.
@@ -598,8 +617,6 @@ emcc.flags += -v
 endif
 
 
-# wasmMemory ==> required by our code for use with -sIMPORTED_MEMORY
-# Emscripten 4.0.7 (2025-04-15) stops exporting HEAP* by default
 ########################################################################
 # emcc flags for .c/.o.
 emcc.cflags :=
@@ -607,7 +624,8 @@ emcc.cflags += -std=c99 -fPIC
 # -------------^^^^^^^^ we need c99 for $(sqlite3-wasm.c), primarily
 # for variadic macros and snprintf() to implement
 # sqlite3_wasm_enum_json().
-emcc.cflags += -I. -I$(dir.top)
+emcc.cflags += -I$(dir.ltc)/src/headers
+
 ########################################################################
 # emcc flags specific to building .js/.wasm files...
 emcc.jsflags := -fPIC
@@ -619,9 +637,12 @@ emcc.jsflags += -sNO_POLYFILL
 emcc.jsflags += -sEXPORTED_FUNCTIONS=@$(EXPORTED_FUNCTIONS.api)
 emcc.exportedRuntimeMethods := \
     -sEXPORTED_RUNTIME_METHODS=wasmMemory,HEAP8,HEAPU8,HEAP16,HEAPU16,HEAP32,HEAPU32,HEAP64,HEAPU64
+# wasmMemory ==> required by our code for use with -sIMPORTED_MEMORY
+# Emscripten 4.0.7 (2025-04-15) stops exporting HEAP* by default
 emcc.jsflags += $(emcc.exportedRuntimeMethods)
 emcc.jsflags += -sUSE_CLOSURE_COMPILER=0
 emcc.jsflags += -sIMPORTED_MEMORY
+emcc.jsflags += -I$(dir.ltc)/src/headers
 ifeq (,$(filter -O0,$(emcc_opt)))
 emcc.assert ?= 0
 else
@@ -718,7 +739,8 @@ emcc.jsflags += -Wno-limited-postlink-optimizations
 # emcc.jsflags += -sSTANDALONE_WASM # causes OOM errors, not sure why.
 
 # Re. undefined symbol handling, see: https://lld.llvm.org/WebAssembly.html
-emcc.jsflags += -sERROR_ON_UNDEFINED_SYMBOLS=1
+# Mozzart88: Do we need this change???
+emcc.jsflags += -sERROR_ON_UNDEFINED_SYMBOLS=0
 emcc.jsflags += -sLLD_REPORT_UNDEFINED
 #emcc.jsflags += --allow-undefined
 #emcc.jsflags += --import-undefined
@@ -814,6 +836,8 @@ $(post-js.js.in): $(MKDIR.bld) $(post-jses.js) $(MAKEFILE)
 sqlite3.wasm := $(dir.dout)/sqlite3.wasm
 sqlite3-wasm.c := $(dir.api)/sqlite3-wasm.c
 sqlite3-wasm.cfiles := $(sqlite3-wasm.c) $(sqlite3_wasm_extra_init.c)
+sqlite3-wasm.cfiles += \
+	$(shell find $(dir.ltc)/src -name '*.c')
 sqlite3-wasmfs.cfiles := $(sqlite3-wasm.cfiles)
 # sqlite3-wasm.o vs sqlite3-wasm.c: building against the latter
 # (predictably) results in a slightly faster binary. We're close
@@ -1005,7 +1029,8 @@ batch: batch-runner.list
 # emcc.speedtest1.common = emcc flags used by multiple builds of speedtest1
 # emcc.speedtest1 = emcc flags used by main build of speedtest1
 emcc.speedtest1.common := $(emcc_opt_full)
-emcc.speedtest1 := -I. -I$(dir $(sqlite3.canonical.c))
+emcc.speedtest1 := -I. -I$(dir $(sqlite3.canonical.c)) -I$(dir.ltc)/src/headers
+emcc.speedtest1 += $(shell find $(dir.ltc) -name '*.c')
 emcc.speedtest1 += -sENVIRONMENT=web
 emcc.speedtest1 += -sALLOW_MEMORY_GROWTH
 emcc.speedtest1 += -sINITIAL_MEMORY=$(emcc.INITIAL_MEMORY.$(emcc.INITIAL_MEMORY))
