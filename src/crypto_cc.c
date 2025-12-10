@@ -139,7 +139,7 @@ static int sqlcipher_cc_cipher(
 ) {
   CCCryptorRef cryptor;
   size_t tmp_csz, csz;
-  CCOperation op = mode == CIPHER_ENCRYPT ? kCCEncrypt : kCCDecrypt;
+  CCOperation op = mode == SQLCIPHER_ENCRYPT ? kCCEncrypt : kCCDecrypt;
 
   if(CCCryptorCreate(op, kCCAlgorithmAES128, 0, key, kCCKeySizeAES256, iv, &cryptor) != kCCSuccess) return SQLITE_ERROR;
   if(CCCryptorUpdate(cryptor, in, in_sz, out, in_sz, &tmp_csz) != kCCSuccess) return SQLITE_ERROR;

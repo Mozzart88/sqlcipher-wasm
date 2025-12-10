@@ -339,6 +339,7 @@ do_test integrity-check-plaintext-header {
     PRAGMA cipher_integrity_check;
   }]
 } {{} 1 {{HMAC verification failed for page 1} {HMAC verification failed for page 2}}}
+db close
 file delete -force test.db
 
 # test that changing the key in the middle of database operations does

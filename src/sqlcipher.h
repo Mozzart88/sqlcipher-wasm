@@ -36,6 +36,10 @@
 #define SQLCIPHER_H
 
 #include "sqlite3.h"
+#include "sqliteInt.h"
+
+#define SQLCIPHER_DECRYPT 0
+#define SQLCIPHER_ENCRYPT 1
 
 #define SQLCIPHER_HMAC_SHA1 0
 #define SQLCIPHER_HMAC_SHA1_LABEL "HMAC_SHA1"

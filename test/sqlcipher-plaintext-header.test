@@ -60,6 +60,7 @@ do_test test-pragma-salt-get {
   set header [string tolower [hexio_read test.db 0 16]]
   string equal $header $salt
 } {1}
+db close
 file delete -force test.db
 
 # explicitly set the salt of a new database 
@@ -84,6 +85,7 @@ do_test test-pragma-salt-set {
   "]
 
 } {01010101010101010101010101010101 {ok 1 01010101010101010101010101010101}}
+db close
 file delete -force test.db
 
 

@@ -436,8 +436,6 @@ set flist {
    memjournal.c
 
    sqlcipher.c
-   crypto_libtomcrypt.c
-   crypto_nss.c
    crypto_openssl.c
    crypto_cc.c
 
@@ -499,6 +497,7 @@ set flist {
    sqlite3rbu.c
    dbstat.c
    dbpage.c
+   carray.c
    sqlite3session.c
    fts5.c
    stmt.c

@@ -74,6 +74,20 @@ do_test will-open-with-correct-derived-key {
 db close
 file delete -force test.db
 
+# run test with sqlite3_key function directly
+setup test.db "'testkey'"
+do_test will-open-with-sqlite3key {
+
+  sqlite_orig db test.db
+  sqlite3_key db "testkey"
+  execsql {
+    SELECT name FROM sqlite_schema WHERE type='table';
+    SELECT * from t1;
+  }
+} {t1 test1 test2}
+db close
+file delete -force test.db
+
 # set an encryption key (non-hex) and create
 # temp tables, verify you can read from
 # sqlite_temp_master
@@ -821,24 +835,6 @@ do_test cipher-options-before-keys {
 db close
 file delete -force test.db
 
-# verify memory security behavior
-# initially should report OFF
-# then enable, check that it is ON
-# try to turn if off, but verify that it
-# can't be unset.
-do_test verify-memory-security {
-    sqlite_orig db test.db
-    execsql {
-        PRAGMA cipher_memory_security;
-        PRAGMA cipher_memory_security = ON;
-        PRAGMA cipher_memory_security;
-        PRAGMA cipher_memory_security = OFF;
-        PRAGMA cipher_memory_security;
-    }
-} {0 1 1}
-db close
-file delete -force test.db
-
 # create two new database files, write to each
 # and verify that they have different (i.e. random)
 # salt values
@@ -855,10 +851,10 @@ do_test test-random-salt {
     CREATE TABLE t1(a,b);
     INSERT INTO t1(a,b) VALUES (1,2);
   } db2
-  db close
-  db2 close
   string equal [hexio_read test.db 0 16] [hexio_read test2.db 0 16]
 } {0}
+db close
+db2 close
 file delete -force test.db
 file delete -force test2.db
 
@@ -961,8 +957,6 @@ file delete -force test.db
 # close database
 # open normally providing key via pragma verify
 # correct key works
-sqlite3_shutdown
-sqlite3_config_uri 1
 do_test uri-key {
   sqlite_orig db file:test.db?a=a&key=testkey&c=c
 
@@ -1000,8 +994,85 @@ do_test uri-key-2 {
 } {1 {file is not a database}}
 db close
 file delete -force test.db
-sqlite3_shutdown
-sqlite3_config_uri 0
+
+# test cipher_status reports encrypted for database
+do_test cipher-status-encrypted {
+  sqlite_orig db test.db
+
+  execsql {
+    PRAGMA key = 'test';
+    PRAGMA cipher_status;
+  }
+
+} {ok 1}
+db close
+file delete -force test.db
+
+# test cipher_status reports not-encrypted for plaintext database
+do_test cipher-status-plaintext {
+  sqlite_orig db test.db
+
+  execsql {
+    PRAGMA cipher_status;
+  }
+
+} {0}
+db close
+file delete -force test.db
+
+# test cipher_status reports encrypted for attached database
+# when main database is plaintext and attached database is
+# keyed
+do_test cipher-status-attached-encrypted {
+  sqlite_orig db test.db
+
+  execsql {
+    PRAGMA cipher_status;
+    ATTACH DATABASE 'test2.db' AS test2 KEY 'test';
+    PRAGMA test2.cipher_status;
+    DETACH DATABASE test2;
+  }
+
+} {0 1}
+db close
+file delete -force test.db
+file delete -force test2.db
+
+# test cipher_status reports plaintext for attached database
+# when main database is keyed and attached database is not
+do_test cipher-status-attached-plaintext {
+  sqlite_orig db test.db
+
+  execsql {
+    PRAGMA KEY = 'test';
+    PRAGMA cipher_status;
+    ATTACH DATABASE 'test2.db' AS test2 KEY '';
+    PRAGMA test2.cipher_status;
+    DETACH DATABASE test2;
+  }
+
+} {ok 1 0}
+db close
+file delete -force test.db
+file delete -force test2.db
+
+# test cipher_status reports unencrypted if key derivation
+# and operation fails
+setup test.db "'testkey'"
+do_test cipher-status-badkey {
+  sqlite_orig db test.db
+
+  catchsql {
+    PRAGMA key = 'test';
+    SELECT count(*) FROM sqlite_master;
+  }
+  execsql {
+    PRAGMA cipher_status;
+  }
+
+} {0}
+db close
+file delete -force test.db
 
 finish_test
 

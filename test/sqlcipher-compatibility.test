@@ -69,6 +69,7 @@ do_test unencrypted-attach {
     SELECT count(*) FROM t1;
   } db2 
 } {ok 1000}
+db close
 db2 close
 file delete -force test.db
 file delete -force test2.db
@@ -103,6 +104,7 @@ do_test unencrypted-attach-raw-key {
     SELECT count(*) FROM t1;
   } db2 
 } {ok 1000}
+db close
 db2 close
 file delete -force test.db
 file delete -force test2.db
@@ -1052,36 +1054,44 @@ file delete -force test.db
 do_test migrate-1.1.8-database-to-current-format {
   file copy -force $sampleDir/sqlcipher-1.1.8-testkey.db test.db
   sqlite_orig db test.db
-  execsql {
+  set rc {}
+
+  lappend rc [execsql {
     PRAGMA key = 'testkey';
     PRAGMA cipher_migrate;
-  }
+    SELECT count(*) FROM sqlite_schema;
+  }]
   db close
     
   sqlite_orig db test.db
-  execsql {
+  lappend rc [execsql {
     PRAGMA key = 'testkey';
     SELECT count(*) FROM sqlite_schema;
-  }
-} {ok 1}
+    PRAGMA journal_mode;
+  }]
+} {{ok 0 1} {ok 1 delete}}
 db close
 file delete -force test.db 
 
 do_test migrate-2-0-le-database-to-current-format {
   file copy -force $sampleDir/sqlcipher-2.0-le-testkey.db test.db
   sqlite_orig db test.db
-  execsql {
+  set rc {}
+
+  lappend rc [execsql {
     PRAGMA key = 'testkey';
     PRAGMA cipher_migrate;
-  }
+    SELECT count(*) FROM sqlite_schema;
+  }]
   db close
     
   sqlite_orig db test.db
-  execsql {
+  lappend rc [execsql {
     PRAGMA key = 'testkey';
     SELECT count(*) FROM sqlite_schema;
-  }
-} {ok 1}
+    PRAGMA journal_mode;
+  }]
+} {{ok 0 1} {ok 1 delete}}
 db close
 file delete -force test.db 
 
@@ -1247,6 +1257,7 @@ do_test key-multiple-databases-with-different-keys-using-pragma {
         attach database 'test.db' as test key 'foobar';
         select * from t1;
         select * from test.t1;
+        detach database test;
     }
 } {ok foo bar baz qux}
 db close
@@ -1283,6 +1294,7 @@ if_built_with_libtomcrypt verify-random-data-alters-file-content {
     lappend rc [cmpFilesChunked test.db test2.db]
     lappend rc [cmpFilesChunked test2.db test3.db]
 } {0 1}
+db close
 file delete -force test.db
 file delete -force test2.db
 file delete -force test3.db

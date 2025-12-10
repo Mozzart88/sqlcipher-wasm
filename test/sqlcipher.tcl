@@ -34,13 +34,13 @@
 # to bypass default key assignment.
 
 
-file delete -force test.db
+set testdir [file dirname $argv0]
+set sampleDir [file normalize [file dirname [file dirname $argv0]]]/sqlcipher-resources
+
+catch {file delete -force test.db}
 file delete -force test2.db
 file delete -force test3.db
 file delete -force test4.db
-                          
-set testdir [file dirname $argv0]
-set sampleDir [file normalize [file dirname [file dirname $argv0]]]/sqlcipher-resources
 
 # If the library is not compiled with has_codec support then
 # skip all tests in this file.
